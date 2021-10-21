@@ -667,7 +667,7 @@ class NanoPerspective(BasicTransform):
         scale = random.uniform(*ratio)
         Scl[0, 0] *= scale
         Scl[1, 1] *= scale
-        return Scl
+        return Scl, scale
 
     @staticmethod
     def get_stretch_matrix(width_ratio=(1, 1), height_ratio=(1, 1)):
@@ -797,7 +797,7 @@ class NanoPerspective(BasicTransform):
         P = self.get_perspective_matrix(self.perspective)
         C = P @ C
 
-        Scl = self.get_scale_matrix(self.scale_ratio)
+        Scl, scale = self.get_scale_matrix(self.scale_ratio)
         C = Scl @ C
 
         Str = self.get_stretch_matrix(*self.stretch_ratio)
@@ -825,8 +825,15 @@ class NanoPerspective(BasicTransform):
         box_info.img = img
         if box_info.boxes is not None and len(box_info.boxes):
             assert box_info.xyxy and not box_info.normalized_box, "box form should be xyxy and not normalized coord"
-            box_info.boxes = self.warp_boxes(box_info.boxes, M, dst_shape[0], dst_shape[1])
-        box_info.ext_prop.update({"warp_matrix": M})
+            xy = self.warp_boxes(box_info.boxes, M, dst_shape[0], dst_shape[1])
+            w = xy[:, 2] - xy[:, 0]
+            h = xy[:, 3] - xy[:, 1]
+            area = w * h
+            area0 = (box_info.boxes[:, 2] - box_info.boxes[:, 0]) * (box_info.boxes[:, 3] - box_info.boxes[:, 1])
+            ar = np.maximum(w / (h + 1e-16), h / (w + 1e-16))
+            i = (w > 2) & (h > 2) & (area / (area0 * scale + 1e-16) > 0.2) & (ar < 20)
+            box_info.boxes = xy[i]
+            box_info.labels = box_info.labels[i]
         return box_info
 
 

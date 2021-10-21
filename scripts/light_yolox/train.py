@@ -1,5 +1,11 @@
 import yaml
+import sys
+import argparse
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ProgressBar
+
+sys.path.append("../../")
+
 from scripts.light_yolox.arch import LightYOLOX
 from scripts.light_yolox.task import TrainTask
 from datasets.transform.augmentations import *
@@ -59,30 +65,39 @@ def main(cfg_path):
         num_workers=cfg['device']['workers_per_gpu'],
         collate_fn=train_dataset.collect_fn,
         drop_last=True,
+        pin_memory=True
     )
     val_dataloader = DataLoader(
         val_dataset,
         batch_size=cfg['device']['batchsize_per_gpu'],
         shuffle=False,
         num_workers=cfg['device']['workers_per_gpu'],
-        pin_memory=True,
         collate_fn=val_dataset.collect_fn,
         drop_last=False,
+        pin_memory=True
     )
     cfg['iter_per_epoch'] = len(train_dataloader)
     task = TrainTask(cfg, net)
     trainer = pl.Trainer(
+        default_root_dir=cfg['save_dir'],
         max_epochs=cfg['optim']['epochs'],
         gpus=cfg['device']['gpus'],
-        check_val_every_n_epoch=1,
         accelerator="ddp",
         benchmark=True,
         sync_batchnorm=True,
-        gradient_clip_val=10
+        gradient_clip_val=10,
+        val_check_interval=1.0,
+        callbacks=[ProgressBar(refresh_rate=0)]
     )
     trainer.fit(task, train_dataloader, val_dataloader)
 
 
 if __name__ == '__main__':
-    cpath = "./conifgs/shuffle_pan_yolox_n.yaml"
-    main(cfg_path=cpath)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config",
+                        default="conifgs/shuffle_pan_yolox_n.yaml",
+                        help="train config file path")
+    parser.add_argument("--seed", type=int, default=1024, help="random seed")
+    args = parser.parse_args()
+    pl.seed_everything(args.seed)
+    main(cfg_path=args.config)

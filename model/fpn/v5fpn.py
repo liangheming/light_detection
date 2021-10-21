@@ -4,26 +4,26 @@ from model.module.convs import InvertedResidual, CBR, DWCBR
 
 
 class V5FPN(nn.Module):
-    def __init__(self, in_channels_list):
+    def __init__(self, in_channels_list, act_func=None):
         super(V5FPN, self).__init__()
         assert len(in_channels_list) == 3, "only support 3 level now"
         c3, c4, c5 = in_channels_list
         self.latent_c5 = CBR(c5, c4)
         self.c4_fuse = nn.Sequential(
-            CBR(c4 * 2, c4),
-            InvertedResidual(c4, c4, 1))
-        self.latent_c4 = CBR(c4, c3)
+            CBR(c4 * 2, c4, act_func=act_func),
+            InvertedResidual(c4, c4, 1, act_func=act_func))
+        self.latent_c4 = CBR(c4, c3, act_func=act_func)
         self.c3_out = nn.Sequential(
-            CBR(c3 * 2, c3),
-            InvertedResidual(c3, c3, 1))
-        self.c3_c4 = DWCBR(c3, c3, 3, 2)
+            CBR(c3 * 2, c3, act_func=act_func),
+            InvertedResidual(c3, c3, 1, act_func=act_func))
+        self.c3_c4 = DWCBR(c3, c3, 3, 2, act_func=act_func)
         self.c4_out = nn.Sequential(
-            CBR(c3 * 2, c4, 1, 1),
-            InvertedResidual(c4, c4, 1))
-        self.c4_c5 = DWCBR(c4, c4, 3, 2)
+            CBR(c3 * 2, c4, 1, 1, act_func=act_func),
+            InvertedResidual(c4, c4, 1, act_func=act_func))
+        self.c4_c5 = DWCBR(c4, c4, 3, 2, act_func=act_func)
         self.c5_out = nn.Sequential(
-            CBR(c4 * 2, c5, 1, 1),
-            InvertedResidual(c5, c5, 1))
+            CBR(c4 * 2, c5, 1, 1, act_func=act_func),
+            InvertedResidual(c5, c5, 1, act_func=act_func))
         self.out_channels = [c3, c4, c5]
 
     def forward(self, xs):

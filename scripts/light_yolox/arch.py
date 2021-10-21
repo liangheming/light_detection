@@ -9,38 +9,53 @@ from model.head.yolox_head import Xhead
 class LightYOLOX(nn.Module):
     def __init__(self,
                  num_classes=80,
-                 backbone="shufflenet_v2_x0_5",
-                 neck="pan",
-                 inner_channel=96,
-                 pretrained=True,
-                 stacks=1,
-                 conf_thresh=0.1,
-                 nms_thresh=0.6,
-                 class_agnostic=False):
+                 backbone=None,
+                 neck=None,
+                 head=None,
+                 ):
         super(LightYOLOX, self).__init__()
         act_func = nn.LeakyReLU(negative_slope=0.1, inplace=True)
-        self.backbone = build_backbone(backbone, pretrained=pretrained, act_func=act_func)
-        self.fpn = build_fpn(neck, in_channels_list=self.backbone.out_channels, out_channels=inner_channel,
-                             act_func=act_func)
-        self.head = Xhead(in_channels_list=self.fpn.out_channels,
-                          strides=[8., 16., 32.],
-                          inner_channel=inner_channel,
-                          num_classes=num_classes,
-                          stacks=stacks,
-                          act_func=act_func,
-                          conf_thresh=conf_thresh,
-                          nms_thresh=nms_thresh,
-                          class_agnostic=class_agnostic,
-                          )
+        if backbone is None:
+            backbone = {"name": "shufflenet_v2_x0_5", "pretrained": True}
+        backbone.update({"act_func": act_func})
+
+        self.backbone = build_backbone(**backbone)
+        if neck is None:
+            neck = {"name": "pan", "out_channels": 96}
+        neck.update({"in_channels_list": self.backbone.out_channels, "act_func": act_func})
+        self.fpn = build_fpn(**neck)
+
+        if head is None:
+            head = {
+                "inner_channel": 96,
+                "stacks": 1,
+                "conf_thresh": 0.1,
+                "nms_thresh": 0.6,
+                "center_radius": 2.5,
+                "reg_weights": 5.0,
+                "iou_type": "iou",
+                "class_agnostic": False
+            }
+        head.update({
+            "in_channels_list": self.fpn.out_channels,
+            "strides": [8., 16., 32.],
+            "num_classes": num_classes,
+            "act_func": act_func
+        })
+        self.head = Xhead(**head)
 
     def feature_extra(self, x):
         x = self.backbone(x)
         x = self.fpn(x)
         return x
 
-    def forward(self, x):
-        x = self.feature_extra(x)
-        x = self.head(x)
+    def forward(self, x, targets=None):
+        if self.training:
+            assert targets is not None
+            x = self.feature_extra(x)
+            x = self.head(x, targets)
+        else:
+            x = self.predict(x)
         return x
 
     @torch.no_grad()
@@ -52,7 +67,11 @@ class LightYOLOX(nn.Module):
 
 if __name__ == '__main__':
     from utils.flops import get_model_complexity_info
-    net = LightYOLOX()
+    import yaml
+
+    with open("conifgs/shuffle_pan_yolox_n.yaml", "r") as rf:
+        cfg = yaml.safe_load(rf)
+    net = LightYOLOX(**cfg["model"]).eval()
     inp = torch.randn(size=(4, 3, 416, 416))
     out = net(inp)
     flops, params = get_model_complexity_info(net, input_shape=(3, 320, 320))

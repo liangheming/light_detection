@@ -64,9 +64,9 @@ nano_transform = Sequence(
             scale=(0.5, 1.4)
         ),
         RandScaleToMax(max_threshes=[416, ], center_padding=False),
-        PixelNormalize(),
-        ChannelSwitch(channel_order=(2, 1, 0)),  # bgr -> rgb
-        CoordTransform(c_type="xywh")
+        # PixelNormalize(),
+        # ChannelSwitch(channel_order=(2, 1, 0)),  # bgr -> rgb
+        # CoordTransform(c_type="xywh")
     ]
 )
 basic_transform = Sequence(
@@ -143,10 +143,10 @@ class COCODataSet(BaseDetectionDataset):
         if self.visualize:
             import uuid
             draw_img = box_info.draw_img(colors=colors, names=coco_names)
-            img_name = str(uuid.uuid4()).replace("-", "")[:16]
-            cv.imwrite("{:s}.jpg".format(img_name), draw_img)
-            # cv.imshow(__name__, draw_img)
-            # cv.waitKey(0)
+            # img_name = str(uuid.uuid4()).replace("-", "")[:16]
+            # cv.imwrite("{:s}.jpg".format(img_name), draw_img)
+            cv.imshow(__name__, draw_img)
+            cv.waitKey(0)
         return box_info
 
     def __len__(self):
@@ -175,9 +175,9 @@ if __name__ == '__main__':
     data_set = COCODataSet(img_dir="/home/lion/data/coco/val2017",
                            json_path="/home/lion/data/coco/annotations/instances_val2017.json",
                            transform=nano_transform,
-                           visualize=False
+                           visualize=True
                            )
-    dataloader = DataLoader(dataset=data_set, batch_size=16, shuffle=True, num_workers=2,
+    dataloader = DataLoader(dataset=data_set, batch_size=16, shuffle=True, num_workers=1,
                             collate_fn=data_set.collect_fn, drop_last=True)
     for inp, label, meta_info in dataloader:
         print(inp.shape)
