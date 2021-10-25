@@ -17,6 +17,16 @@ def main(cfg_path):
     with open(cfg_path, "r") as rf:
         cfg = yaml.safe_load(rf)
     net = LightYOLOX(**cfg['model'])
+    color_gitter = OneOf(
+        transforms=[
+            Identity(),
+            RandBCS(
+                brightness=0.2,
+                contrast=(0.6, 1.4),
+                saturation=(0.5, 1.2)
+            )
+        ]
+    )
 
     nano_transform = Sequence(
         transforms=[
@@ -50,8 +60,15 @@ def main(cfg_path):
     train_dataset = COCODataSet(
         img_dir=cfg['data']['train_img_dir'],
         json_path=cfg['data']['train_json_path'],
-        transform=nano_transform
+        transform=None
     )
+    mosaic_transform = MosaicWrapper(
+        candidate_box_info=train_dataset.data_list,
+        sizes=[cfg['data']['size']],
+        color_gitter=color_gitter
+    )
+    train_dataset.transform = mosaic_transform
+    train_dataset.ext_transform = nano_transform
     val_dataset = COCODataSet(
         img_dir=cfg['data']['val_img_dir'],
         json_path=cfg['data']['val_json_path'],
@@ -87,7 +104,9 @@ def main(cfg_path):
         sync_batchnorm=True,
         gradient_clip_val=10,
         val_check_interval=1.0,
-        callbacks=[ProgressBar(refresh_rate=0)]
+        callbacks=[ProgressBar(refresh_rate=0)],
+        # precision=16,
+        # amp_backend="native"
     )
     trainer.fit(task, train_dataloader, val_dataloader)
 
@@ -95,7 +114,7 @@ def main(cfg_path):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--config",
-                        default="conifgs/shuffle_pan_yolox_n.yaml",
+                        default="conifgs/shuffle_pan_yolox_s.yaml",
                         help="train config file path")
     parser.add_argument("--seed", type=int, default=1024, help="random seed")
     args = parser.parse_args()

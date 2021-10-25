@@ -129,7 +129,11 @@ class COCODataSet(BaseDetectionDataset):
             if valid_box_len == 0 and not self.empty_allowed:
                 continue
             label_info = np.array(label_list)
-            box_info = BoxInfoCV(img_path=img_path, boxes=label_info[:, 1:], labels=label_info[:, 0])
+            if len(label_info):
+                box_info = BoxInfoCV(img_path=img_path, boxes=label_info[:, 1:], labels=label_info[:, 0])
+            else:
+                box_info = BoxInfoCV(img_path=img_path, boxes=None, labels=None)
+                box_info.revise_label()
             box_info.id = img_id
             box_info.ext_prop.update({"id": img_id})
             box_info.ext_prop.update({"shape": (width, height)})

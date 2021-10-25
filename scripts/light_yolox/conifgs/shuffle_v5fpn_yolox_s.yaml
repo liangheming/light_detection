@@ -5,10 +5,9 @@ model:
     name: shufflenet_v2_x0_5
     pretrained: True
   neck:
-    name: pan
-    out_channels: 96
+    name: v5fpn
   head:
-    inner_channel: 96
+    inner_channel: 80
     stacks: 1
     conf_thresh: 0.1
     nms_thresh: 0.6

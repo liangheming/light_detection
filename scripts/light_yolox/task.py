@@ -39,6 +39,9 @@ class TrainTask(LightningModule):
             )
 
     def on_train_epoch_start(self):
+        if self.current_epoch == (self.cfg['optim']['epochs'] - self.cfg['optim']['no_aug_epoch']):
+            self.info("switch to nano transform")
+            self.train_dataloader().dataset.transform = self.train_dataloader().dataset.ext_transform
         self.tic = time.time()
         self.info("=" * 80)
         self.info("Training Start {:0>3d}|{:0>3d}".format(self.current_epoch, self.cfg['optim']['epochs']))
@@ -56,7 +59,7 @@ class TrainTask(LightningModule):
         self.log("cls", cls, on_step=True, on_epoch=False, sync_dist=True)
         msg = "Train Epoch: {:0>3d}|{:0>3d} iter: {:0>4d}|{:0>4d} "
         msg += "loss: {:6.4f} iou: {:6.4f} obj: {:6.4f} cls: {:6.4f} lr: {:8.6f} match_num {:0>4d}"
-        msg += "ori map: {:6.4f} ema map: {:6.4f}"
+        msg += " ori map: {:6.4f} ema map: {:6.4f}"
         msg = msg.format(
             self.current_epoch,
             self.cfg['optim']['epochs'],
