@@ -176,11 +176,27 @@ class COCODataSet(BaseDetectionDataset):
 if __name__ == '__main__':
     from torch.utils.data.dataloader import DataLoader
 
+    color_gitter = OneOf(
+        transforms=[
+            Identity(),
+            RandBCS(
+                brightness=0.2,
+                contrast=(0.6, 1.4),
+                saturation=(0.5, 1.2)
+            )
+        ]
+    )
     data_set = COCODataSet(img_dir="/home/lion/data/coco/val2017",
                            json_path="/home/lion/data/coco/annotations/instances_val2017.json",
                            transform=nano_transform,
                            visualize=True
                            )
+    mosaic = MosaicWrapper(
+        candidate_box_info=data_set.data_list,
+        sizes=[416, ],
+        color_gitter=color_gitter
+    )
+    data_set.transform = mosaic
     dataloader = DataLoader(dataset=data_set, batch_size=16, shuffle=True, num_workers=1,
                             collate_fn=data_set.collect_fn, drop_last=True)
     for inp, label, meta_info in dataloader:

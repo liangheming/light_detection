@@ -39,9 +39,9 @@ class TrainTask(LightningModule):
             )
 
     def on_train_epoch_start(self):
-        if self.current_epoch == (self.cfg['optim']['epochs'] - self.cfg['optim']['no_aug_epoch']):
-            self.info("switch to nano transform")
-            self.train_dataloader().dataset.transform = self.train_dataloader().dataset.ext_transform
+        # if self.current_epoch == (self.cfg['optim']['epochs'] - self.cfg['optim']['no_aug_epoch']):
+        #     self.info("switch to nano transform")
+        #     self.train_dataloader().dataset.transform = self.train_dataloader().dataset.ext_transform
         self.tic = time.time()
         self.info("=" * 80)
         self.info("Training Start {:0>3d}|{:0>3d}".format(self.current_epoch, self.cfg['optim']['epochs']))
@@ -52,28 +52,28 @@ class TrainTask(LightningModule):
         label = label.to(self.device)
         target = {"label": label, "batch_len": meta_info['batch_len']}
         loss, iou, obj, cls, gt_num = self.model(inp, target)
-        lr = self.optimizers().param_groups[0]["lr"]
+        # lr = self.optimizers().param_groups[0]["lr"]
         self.log("loss", loss, on_step=True, on_epoch=False, sync_dist=True)
         self.log("iou", iou, on_step=True, on_epoch=False, sync_dist=True)
         self.log("obj", obj, on_step=True, on_epoch=False, sync_dist=True)
         self.log("cls", cls, on_step=True, on_epoch=False, sync_dist=True)
-        msg = "Train Epoch: {:0>3d}|{:0>3d} iter: {:0>4d}|{:0>4d} "
-        msg += "loss: {:6.4f} iou: {:6.4f} obj: {:6.4f} cls: {:6.4f} lr: {:8.6f} match_num {:0>4d}"
-        msg += " ori map: {:6.4f} ema map: {:6.4f}"
-        msg = msg.format(
-            self.current_epoch,
-            self.cfg['optim']['epochs'],
-            int(batch_idx),
-            int(self.trainer.num_training_batches),
-            loss.item() / self.trainer.num_gpus,
-            iou.item() / self.trainer.num_gpus,
-            obj.item() / self.trainer.num_gpus,
-            cls.item() / self.trainer.num_gpus,
-            lr,
-            int(gt_num / self.trainer.num_gpus),
-            self.map_flag,
-            self.emap_flag)
-        self.info(msg)
+        # msg = "Train Epoch: {:0>3d}|{:0>3d} iter: {:0>4d}|{:0>4d} "
+        # msg += "loss: {:6.4f} iou: {:6.4f} obj: {:6.4f} cls: {:6.4f} lr: {:8.6f} match_num {:0>4d}"
+        # msg += " ori map: {:6.4f} ema map: {:6.4f}"
+        # msg = msg.format(
+        #     self.current_epoch,
+        #     self.cfg['optim']['epochs'],
+        #     int(batch_idx),
+        #     int(self.trainer.num_training_batches),
+        #     loss.item() / self.trainer.num_gpus,
+        #     iou.item() / self.trainer.num_gpus,
+        #     obj.item() / self.trainer.num_gpus,
+        #     cls.item() / self.trainer.num_gpus,
+        #     lr,
+        #     int(gt_num / self.trainer.num_gpus),
+        #     self.map_flag,
+        #     self.emap_flag)
+        # self.info(msg)
         return loss
 
     def optimizer_step(

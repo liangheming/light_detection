@@ -32,35 +32,32 @@ class Xhead(nn.Module):
         self.class_agnostic = class_agnostic
         self.nms_thresh = nms_thresh
         self.grids = [torch.zeros(1)] * len(in_channels_list)
-        self.stems = nn.ModuleList()
+        # self.stems = nn.ModuleList()
         self.cls_convs = list()
         self.reg_convs = list()
         self.cls_preds = nn.ModuleList()
         self.reg_preds = nn.ModuleList()
         self.obj_preds = nn.ModuleList()
         for i in range(len(in_channels_list)):
-            self.stems.append(
-                CBR(in_channels_list[i], inner_channel, 1, 1, act_func=act_func) if in_channels_list[i] != inner_channel
-                else InvertedResidual(in_channels_list[i], inner_channel, 1, act_func=act_func)
-            )
             # self.stems.append(
-            #     CBR(in_channels_list[i], inner_channel, 1, 1, act_func=act_func)
+            #     CBR(in_channels_list[i], inner_channel, 1, 1, act_func=act_func) if in_channels_list[i] != inner_channel
+            #     else InvertedResidual(in_channels_list[i], inner_channel, 1, act_func=act_func)
             # )
             for j in range(stacks):
-                self.cls_convs.append(
-                    InvertedResidual(
-                        inner_channel, inner_channel, 1, act_func=act_func)
-                )
-                self.reg_convs.append(
-                    InvertedResidual(
-                        inner_channel, inner_channel, 1, act_func=act_func)
-                )
                 # self.cls_convs.append(
-                #     DWCBR(inner_channel, inner_channel, 3, 1, 1, act_func=act_func)
+                #     InvertedResidual(
+                #         inner_channel, inner_channel, 1, act_func=act_func)
                 # )
                 # self.reg_convs.append(
-                #     DWCBR(inner_channel, inner_channel, 3, 1, 1, act_func=act_func)
+                #     InvertedResidual(
+                #         inner_channel, inner_channel, 1, act_func=act_func)
                 # )
+                self.cls_convs.append(
+                    DWCBR(inner_channel, inner_channel, 3, 1, 1, act_func=act_func)
+                )
+                self.reg_convs.append(
+                    DWCBR(inner_channel, inner_channel, 3, 1, 1, act_func=act_func)
+                )
             self.cls_preds.append(
                 nn.Conv2d(inner_channel, num_classes, 1, 1, 0)
             )
@@ -101,7 +98,7 @@ class Xhead(nn.Module):
         outputs = list()
         for k in range(len(xs)):
             x = xs[k]
-            x = self.stems[k](x)
+            # x = self.stems[k](x)
             cls_output = self.cls_preds[k](self.cls_convs[k](x))
             reg_feat = self.reg_convs[k](x)
             reg_output = self.reg_preds[k](reg_feat)

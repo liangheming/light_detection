@@ -17,16 +17,16 @@ def main(cfg_path):
     with open(cfg_path, "r") as rf:
         cfg = yaml.safe_load(rf)
     net = LightYOLOX(**cfg['model'])
-    color_gitter = OneOf(
-        transforms=[
-            Identity(),
-            RandBCS(
-                brightness=0.2,
-                contrast=(0.6, 1.4),
-                saturation=(0.5, 1.2)
-            )
-        ]
-    )
+    # color_gitter = OneOf(
+    #     transforms=[
+    #         Identity(),
+    #         RandBCS(
+    #             brightness=0.2,
+    #             contrast=(0.6, 1.4),
+    #             saturation=(0.5, 1.2)
+    #         )
+    #     ]
+    # )
 
     nano_transform = Sequence(
         transforms=[
@@ -60,15 +60,22 @@ def main(cfg_path):
     train_dataset = COCODataSet(
         img_dir=cfg['data']['train_img_dir'],
         json_path=cfg['data']['train_json_path'],
-        transform=None
+        transform=nano_transform
     )
-    mosaic_transform = MosaicWrapper(
-        candidate_box_info=train_dataset.data_list,
-        sizes=[cfg['data']['size']],
-        color_gitter=color_gitter
-    )
-    train_dataset.transform = mosaic_transform
-    train_dataset.ext_transform = nano_transform
+
+    # mosaic = MosaicWrapper(
+    #     candidate_box_info=train_dataset.data_list,
+    #     sizes=[cfg['data']['size']],
+    #     color_gitter=color_gitter
+    # )
+    # mosaic_transform = Sequence(
+    #     transforms=[
+    #         mosaic,
+    #         PixelNormalize(),
+    #         ChannelSwitch(channel_order=(2, 1, 0)),  # bgr -> rgb,
+    #         CoordTransform(c_type="xywh")
+    #     ]
+    # )
     val_dataset = COCODataSet(
         img_dir=cfg['data']['val_img_dir'],
         json_path=cfg['data']['val_json_path'],
