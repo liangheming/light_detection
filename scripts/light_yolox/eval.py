@@ -17,14 +17,12 @@ from datasets.coco import COCODataSet, coco_ids
 def main(cfg_path):
     with open(cfg_path, "r") as rf:
         cfg = yaml.safe_load(rf)
-    cfg['model']['head']['stacks'] = 1
     cfg['model']['head']['conf_thresh'] = 0.01
     cfg['model']['head']['nms_thresh'] = 0.6
-    cfg['data']['size'] = 416
+    cfg['data']['size'] = 320
     print(cfg)
     net = LightYOLOX(**cfg['model'])
-    # weight = torch.load(os.path.join(cfg['save_dir'], "ema_last.pth"), map_location="cpu")
-    weight = torch.load(os.path.join("workspace/shuffle_pan_yolox_n", "ema_last.pth"), map_location="cpu")
+    weight = torch.load(os.path.join(cfg['save_dir'], "ema_last.pth"), map_location="cpu")
     net.load_state_dict(weight)
     # coco_gt = COCO(cfg['data']['val_json_path'])
     coco_gt = COCO("/home/lion/data/coco/annotations/instances_val2017.json")
@@ -84,15 +82,3 @@ if __name__ == '__main__':
     parser.add_argument("--seed", type=int, default=1024, help="random seed")
     args = parser.parse_args()
     main(cfg_path=args.config)
-# Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.130
-# Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.249
-# Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.121
-# Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.027
-# Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.109
-# Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.237
-# Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.152
-# Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.230
-# Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.242
-# Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.046
-# Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.230
-# Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.427

@@ -9,7 +9,7 @@ model:
     out_channels: 96
   head:
     inner_channel: 96
-    stacks: 2
+    stacks: 1
     conf_thresh: 0.1
     nms_thresh: 0.6
     center_radius: 2.5
