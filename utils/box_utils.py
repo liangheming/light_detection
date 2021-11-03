@@ -72,17 +72,18 @@ class BoxSimilarity(object):
 
 
 class IOULoss(object):
-    def __init__(self, iou_type="giou", coord_type="xyxy"):
+    def __init__(self, iou_type="giou", coord_type="xyxy", weights=1.0):
         super(IOULoss, self).__init__()
+        self.weights = weights
         self.iou_type = iou_type
         self.box_similarity = BoxSimilarity(iou_type, coord_type)
 
-    def __call__(self, predicts, targets):
+    def __call__(self, predicts, targets, weights=1.0):
         similarity = self.box_similarity(predicts, targets)
         if self.iou_type == "iou":
-            return -(similarity + 1e-8).log()
+            return -(similarity + 1e-8).log() * weights * self.weights
         else:
-            return 1 - similarity
+            return (1 - similarity) * weights * self.weights
 
 
 def xyxy2xywh(x):

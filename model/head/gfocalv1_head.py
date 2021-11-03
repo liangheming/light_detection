@@ -1,7 +1,66 @@
 import math
 import torch
 from torch import nn
-from model.module.convs import DWCBR
+from model.module.convs import DWCBR2
+from utils.general import reduce_mean
+from utils.box_utils import bboxes_iou, IOULoss
+import torch.nn.functional as f
+
+
+class QFLoss(object):
+    def __init__(self, weights=1.0, gama=2.0):
+        super(QFLoss, self).__init__()
+        self.weights = weights
+        self.gama = gama
+
+    def __call__(self, predicts, targets):
+        pred_sigmoid = predicts.sigmoid()
+        scale_factor = (pred_sigmoid - targets).abs().pow(self.gama)
+        bce = f.binary_cross_entropy_with_logits(predicts, targets, reduction="none")
+        return self.weights * scale_factor * bce
+
+
+class DFLoss(object):
+    def __init__(self, weights=1.0):
+        super(DFLoss, self).__init__()
+        self.weights = weights
+
+    def __call__(self, predicts, targets, weights=1.0):
+        reg_max = predicts.shape[-1] // 4
+        predicts_flat = predicts.view(-1, reg_max)
+        targets_flat = targets.view(-1)
+        dis_left = targets_flat.long()
+        dis_right = dis_left + 1
+        weight_left = dis_right.float() - targets_flat
+        weight_right = targets_flat - dis_left.float()
+        loss = (
+                f.cross_entropy(predicts_flat, dis_left, reduction="none") * weight_left
+                + f.cross_entropy(predicts_flat, dis_right, reduction="none") * weight_right
+        )
+        return (loss.view(-1, 4).mean(-1) * weights) * self.weights
+
+
+class Integral(nn.Module):
+    def __init__(self, reg_max=7):
+        super(Integral, self).__init__()
+        self.reg_max = reg_max
+        self.register_buffer(
+            "project", torch.linspace(0, self.reg_max, self.reg_max + 1)
+        )
+
+    def forward(self, x):
+        """Forward feature from the regression head to get integral result of
+        bounding box location.
+        Args:
+            x (Tensor): Features of the regression head, shape (N, 4*(n+1)),
+                n is self.reg_max.
+        Returns:
+            x (Tensor): Integral result of box locations, i.e., distance
+                offsets from the box center in four directions, shape (N, 4).
+        """
+        x = f.softmax(x.reshape(-1, self.reg_max + 1), dim=1)
+        x = f.linear(x, self.project.type_as(x)).reshape(-1, 4)
+        return x
 
 
 class GFocalHead(nn.Module):
@@ -25,10 +84,20 @@ class GFocalHead(nn.Module):
                  act_func=None,
                  ):
         super(GFocalHead, self).__init__()
+        self.num_classes = num_classes
         self.in_channels_list = in_channels_list
+        self.strides = strides
+        self.cell_sizes = cell_sizes
         self.stacks = stacks
         self.inner_channel = inner_channel
-        self.num_classes = num_classes
+        self.top_k = top_k
+        self.qfl_weight = qfl_weight
+        self.dfl_weight = dfl_weight
+        self.iou_weight = iou_weight
+        self.iou_type = iou_type
+        self.conf_thresh = conf_thresh
+        self.nms_thresh = nms_thresh
+        self.class_agnostic = class_agnostic
         self.reg_max = reg_max
         self.share_cls_reg = share_cls_reg
         self.act_func = act_func
@@ -36,6 +105,10 @@ class GFocalHead(nn.Module):
         self.reg_convs = nn.ModuleList()
         self.cls_preds = nn.ModuleList()
         self.reg_preds = nn.ModuleList()
+        self.distribute_project = Integral(reg_max=reg_max)
+        self.iou_loss = IOULoss(iou_type=iou_type, weights=iou_weight)
+        self.qlf_loss = QFLoss(weights=qfl_weight)
+        self.dlf_loss = DFLoss(weights=dfl_weight)
         self.__init_layers()
         self.__init_weights()
 
@@ -45,15 +118,15 @@ class GFocalHead(nn.Module):
             reg_sequence = list()
             for j in range(self.stacks):
                 cls_sequence.append(
-                    DWCBR(self.in_channels_list[i] if j == 0 else self.inner_channel,
-                          self.inner_channel, 3, 1,
-                          act_func=self.act_func)
+                    DWCBR2(self.in_channels_list[i] if j == 0 else self.inner_channel,
+                           self.inner_channel, 3, 1,
+                           act_func=self.act_func)
                 )
                 if not self.share_cls_reg:
                     reg_sequence.append(
-                        DWCBR(self.in_channels_list[i] if j == 0 else self.inner_channel,
-                              self.inner_channel, 3, 1,
-                              act_func=self.act_func)
+                        DWCBR2(self.in_channels_list[i] if j == 0 else self.inner_channel,
+                               self.inner_channel, 3, 1,
+                               act_func=self.act_func)
                     )
             self.cls_convs.append(nn.Sequential(*cls_sequence))
             if not self.share_cls_reg:
@@ -100,7 +173,7 @@ class GFocalHead(nn.Module):
         if self.training:
             assert targets is not None
             predicts = self.forward_impl(xs)
-            return predicts
+            return self.compute_loss(predicts, targets)
         else:
             return self.predict(xs)
 
@@ -108,6 +181,136 @@ class GFocalHead(nn.Module):
         outputs = self.forward_impl(xs)
         return outputs
 
+    def compute_loss(self, predicts, targets):
+        expand_cls_predict, expand_reg_predicts = self.cat_layer_output(predicts)
 
-if __name__ == '__main__':
-    GFocalHead([96, 128, 196], [8, 16, 32], None, 96, 80)
+        grid_sizes = [[cls.shape[3], cls.shape[2]] for cls, _ in predicts]
+        grid_cell_sizes = [[*grid_sizes[i], *self.cell_sizes[i], self.strides[i]] for i in range(len(predicts))]
+        grid_cells = self.build_grid_cells(grid_cell_sizes).type_as(expand_cls_predict)
+        cell_num_each_level = [w * h for w, h in grid_sizes]
+        expand_strides = torch.tensor(sum([[s] * n for n, s in zip(cell_num_each_level, self.strides)],
+                                          [])).type_as(expand_cls_predict)
+        labels_all = targets['label']
+        label_list = labels_all.split(targets['batch_len'])
+
+        cls_target_list = list()
+        box_predict_list = list()
+        box_targets_list = list()
+        dfl_predict_list = list()
+        dfl_targets_list = list()
+        weights_targets_list = list()
+        gt_num = 0
+        for i in range(len(label_list)):
+            label = label_list[i]
+            cls_target = torch.zeros_like(expand_cls_predict[0])
+
+            if len(label) < 1:
+                cls_target_list.append(cls_target)
+                continue
+            assigned_gt_inds = self.get_assign_lazy(grid_cells, label[:, 1:], cell_num_each_level, self.top_k)
+            gt_mask = assigned_gt_inds >= 0
+            gt_num += gt_mask.sum()
+            pos_bbox_pred = expand_reg_predicts[i][gt_mask]
+            weights_targets = expand_cls_predict[i][gt_mask].detach().sigmoid().max(dim=1)[0]
+            pos_grid_cell_center_grid_scale = (((grid_cells[:, :2] +
+                                                 grid_cells[:, 2:]) / 2.0) / expand_strides[:, None])[gt_mask]
+            pos_bbox_targets_grid_scale = label[:, 1:][assigned_gt_inds[gt_mask]] / (
+                expand_strides[gt_mask][:, None])
+            pos_bbox_pred_corners = self.distribute_project(pos_bbox_pred)
+            x1y1 = pos_grid_cell_center_grid_scale - pos_bbox_pred_corners[:, :2]
+            x2y2 = pos_grid_cell_center_grid_scale + pos_bbox_pred_corners[:, 2:]
+            pos_decode_bbox_pred = torch.cat([x1y1, x2y2], dim=-1)
+
+            cls_target[gt_mask, assigned_gt_inds[gt_mask]] = self.iou_loss.box_similarity(pos_decode_bbox_pred.detach(),
+                                                                                          pos_bbox_targets_grid_scale)
+            corners_targets = torch.cat([pos_grid_cell_center_grid_scale - pos_bbox_targets_grid_scale[:, :2],
+                                         pos_bbox_targets_grid_scale[:, 2:] - pos_grid_cell_center_grid_scale],
+                                        dim=-1).clamp(min=0, max=self.reg_max + 1 - 0.1)
+
+            cls_target_list.append(cls_target)
+            box_predict_list.append(pos_decode_bbox_pred)
+            box_targets_list.append(pos_bbox_targets_grid_scale)
+            dfl_predict_list.append(pos_bbox_pred)
+            dfl_targets_list.append(corners_targets)
+            weights_targets_list.append(weights_targets)
+        weights_targets_tensor = torch.cat(weights_targets_list, dim=0)
+        dfl_predict_tensor = torch.cat(dfl_predict_list, dim=0)
+        dfl_targets_tensor = torch.cat(dfl_targets_list, dim=0)
+        qfl_predict_tensor = expand_cls_predict
+        qfl_target_tensor = torch.stack(cls_target_list, dim=0)
+        box_predict_tensor = torch.cat(box_predict_list, dim=0)
+        box_targets_tensor = torch.cat(box_targets_list, dim=0)
+        gt_num = reduce_mean(gt_num)
+        avg_factor = reduce_mean(weights_targets_tensor.sum())
+        qfl_loss = self.qlf_loss(qfl_predict_tensor, qfl_target_tensor).sum() / gt_num
+        dfl_loss = self.dlf_loss(dfl_predict_tensor, dfl_targets_tensor, weights_targets_tensor).sum() / avg_factor
+        iou_loss = self.iou_loss(box_predict_tensor, box_targets_tensor, weights_targets_tensor).sum() / avg_factor
+        loss = qfl_loss + dfl_loss + iou_loss
+        return loss, iou_loss.detach(), qfl_loss.detach(), dfl_loss.detach(), gt_num
+
+    @staticmethod
+    def get_assign_lazy(grid_cells, gt_boxes, cell_num_each_level, top_k=7, inf=1000000):
+        num_gt, num_grid_cells = gt_boxes.size(0), sum(cell_num_each_level)
+        overlaps = bboxes_iou(grid_cells, gt_boxes)
+        assigned_gt_inds = overlaps.new_full((num_grid_cells,), -1, dtype=torch.long)
+
+        gt_center = (gt_boxes[:, :2] + gt_boxes[:, 2:]) / 2.0
+
+        gc_center = (grid_cells[:, :2] + grid_cells[:, 2:]) / 2.0
+
+        distances = (
+            (gc_center[:, None, :] - gt_center[None, :, :]).pow(2).sum(-1).sqrt()
+        )
+        candidate_idxs = []
+        start_idx = 0
+        for level, cell_num in enumerate(cell_num_each_level):
+            end_idx = start_idx + cell_num
+            distances_per_level = distances[start_idx:end_idx, :]
+            selectable_k = min(top_k, cell_num)
+            _, topk_idxs_per_level = distances_per_level.topk(
+                selectable_k, dim=0, largest=False
+            )
+            candidate_idxs.append(topk_idxs_per_level + start_idx)
+            start_idx = end_idx
+        candidate_idxs = torch.cat(candidate_idxs, dim=0)
+        gt_idxs = torch.arange(num_gt)[None, :].repeat((candidate_idxs.size(0), 1))
+        candidate_overlaps = overlaps[candidate_idxs, torch.arange(num_gt)]
+        overlaps_thr_per_gt = candidate_overlaps.mean(0) + candidate_overlaps.std(0)
+        candidate_is_pos = candidate_overlaps >= overlaps_thr_per_gt
+        candidate_center = gc_center[candidate_idxs, :]
+        candidate_gts = gt_boxes[gt_idxs, :]
+        lt = candidate_center - candidate_gts[..., :2]
+        rb = candidate_gts[..., 2:] - candidate_center
+        candidate_is_in_gts = torch.cat([lt, rb], dim=-1).min(dim=-1)[0] > 0.01
+        candidate_is_pos = candidate_is_pos & candidate_is_in_gts
+        overlaps_inf = torch.full_like(overlaps, -inf)
+        pos_candidate_idx, pos_gt_idx = candidate_idxs[candidate_is_pos], gt_idxs[candidate_is_pos]
+        overlaps_inf[pos_candidate_idx, pos_gt_idx] = overlaps[pos_candidate_idx, pos_gt_idx]
+        max_overlaps, argmax_overlaps = overlaps_inf.max(dim=1)
+        assigned_gt_inds[max_overlaps != -inf] = (
+            argmax_overlaps[max_overlaps != -inf]
+        )
+        return assigned_gt_inds
+
+    @staticmethod
+    def build_grid_cells(grid_cell_sizes):
+        grid_cells = list()
+        for grid_w, grid_h, cell_w, cell_h, stride in grid_cell_sizes:
+            yv, xv = torch.meshgrid(
+                [torch.arange(grid_h, dtype=torch.float32), torch.arange(grid_w, dtype=torch.float32)])
+            cx, cy = (xv + 0.5) * stride, (yv + 0.5) * stride
+            x1, x2 = cx - 0.5 * cell_w, cx + 0.5 * cell_w
+            y1, y2 = cy - 0.5 * cell_h, cy + 0.5 * cell_h
+            grid_cells.append(torch.stack([x1, y1, x2, y2], dim=-1).view(-1, 4))
+        grid_cells = torch.cat(grid_cells, dim=0)
+        return grid_cells
+
+    @staticmethod
+    def cat_layer_output(predicts):
+        cls_outputs = list()
+        reg_outputs = list()
+        for cls, reg in predicts:
+            b, cc, rc = cls.shape[0], cls.shape[1], reg.shape[1]
+            cls_outputs.append(cls.permute(0, 2, 3, 1).contiguous().view(b, -1, cc))
+            reg_outputs.append(reg.permute(0, 2, 3, 1).contiguous().view(b, -1, rc))
+        return torch.cat(cls_outputs, dim=1), torch.cat(reg_outputs, dim=1)
