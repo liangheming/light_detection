@@ -17,7 +17,7 @@ model:
     iou_type: iou
     class_agnostic: False
 data:
-  size: 416
+  size: 320
   train_img_dir: /data/liangheming/coco/train2017
   train_json_path: /data/liangheming/coco/annotations/instances_train2017.json
   val_img_dir: /data/liangheming/coco/val2017

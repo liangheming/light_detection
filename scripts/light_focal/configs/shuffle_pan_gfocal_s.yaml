@@ -1,0 +1,44 @@
+save_dir: workspace/shuffle_pan_gfocal_s
+model:
+  backbone:
+    name: shufflenet_v2_x0_5
+    pretrained: True
+  neck:
+    name: pan
+    out_channels: 96
+    in_channels_list: [48, 96, 192]
+  head:
+    num_classes: 80
+    in_channels_list: [96, 96, 96]
+    strides: [8.0, 16.0, 32.0]
+    cell_sizes: [[40, 40],[80, 80],[160, 160]]
+    inner_channel: 96
+    stacks: 2
+    reg_max: 7
+    share_cls_reg: True
+    top_k: 9
+    qfl_weight: 1.0
+    dfl_weight: 0.25
+    iou_weight: 2.0
+    iou_type: giou
+    conf_thresh: 0.1
+    nms_thresh: 0.6
+    class_agnostic: False
+data:
+  size: 416
+  train_img_dir: /data/liangheming/coco/train2017
+  train_json_path: /data/liangheming/coco/annotations/instances_train2017.json
+  val_img_dir: /data/liangheming/coco/val2017
+  val_json_path: /data/liangheming/coco/annotations/instances_val2017.json
+
+device:
+  batchsize_per_gpu: 64
+  workers_per_gpu: 4
+  gpus: [0,1]
+
+optim:
+  epochs: 300
+  lr: 0.014
+  momentum: 0.9
+  weight_decay: 0.0005
+  warmup_epoch: 1

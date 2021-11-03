@@ -4,7 +4,7 @@ import torchvision
 import torch.nn.functional as f
 from torch import nn
 from utils.box_utils import IOULoss, bboxes_iou
-from model.module.convs import CBR, InvertedResidual, DWCBR
+from model.module.convs import CBR, InvertedResidual
 
 
 class Xhead(nn.Module):
@@ -43,15 +43,19 @@ class Xhead(nn.Module):
                 CBR(in_channels_list[i], inner_channel, 1, 1, act_func=act_func) if in_channels_list[i] != inner_channel
                 else InvertedResidual(in_channels_list[i], inner_channel, 1, act_func=act_func)
             )
+            cls_sequence = list()
+            reg_sequence = list()
             for j in range(stacks):
-                self.cls_convs.append(
+                cls_sequence.append(
                     InvertedResidual(
                         inner_channel, inner_channel, 1, act_func=act_func)
                 )
-                self.reg_convs.append(
+                reg_sequence.append(
                     InvertedResidual(
                         inner_channel, inner_channel, 1, act_func=act_func)
                 )
+            self.cls_convs.append(nn.Sequential(*cls_sequence))
+            self.reg_convs.append(nn.Sequential(*reg_sequence))
             self.cls_preds.append(
                 nn.Conv2d(inner_channel, num_classes, 1, 1, 0)
             )

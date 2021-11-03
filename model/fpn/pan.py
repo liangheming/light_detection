@@ -12,7 +12,8 @@ class LightPAN(nn.Module):
 
         for in_channel in in_channels_list:
             lateral_convs.append(
-                CBR(in_channel, out_channels, 1, 1, act_func=act_func)
+                # CBR(in_channel, out_channels, 1, 1, act_func=act_func)
+                nn.Conv2d(in_channel, out_channels, 1, 1)
             )
         self.lateral_convs = nn.ModuleList(lateral_convs)
         self.out_channels = [out_channels for _ in in_channels_list]

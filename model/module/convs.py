@@ -110,13 +110,31 @@ class InvertedResidual(nn.Module):
 
 
 class DWCBR(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=None, bias=False,act_func=None):
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=None, bias=False, act_func=None):
         super(DWCBR, self).__init__()
         if padding is None:
             padding = (kernel_size - 1) // 2
         self.dw = nn.Sequential(
             nn.Conv2d(in_channels, in_channels, kernel_size, stride, padding, groups=in_channels, bias=bias),
             nn.BatchNorm2d(in_channels),
+            nn.Conv2d(in_channels, out_channels, 1, 1, 0, bias=bias),
+            nn.BatchNorm2d(out_channels),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True) if act_func is None else deepcopy(act_func)
+        )
+
+    def forward(self, x):
+        return self.dw(x)
+
+
+class DWCBR2(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=None, bias=False, act_func=None):
+        super(DWCBR2, self).__init__()
+        if padding is None:
+            padding = (kernel_size - 1) // 2
+        self.dw = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels, kernel_size, stride, padding, groups=in_channels, bias=bias),
+            nn.BatchNorm2d(in_channels),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True) if act_func is None else deepcopy(act_func),
             nn.Conv2d(in_channels, out_channels, 1, 1, 0, bias=bias),
             nn.BatchNorm2d(out_channels),
             nn.LeakyReLU(negative_slope=0.1, inplace=True) if act_func is None else deepcopy(act_func)

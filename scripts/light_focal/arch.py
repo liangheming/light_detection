@@ -3,17 +3,16 @@ import torch
 from torch import nn
 from model.backbone.shufflenet import build_backbone
 from model.fpn import build_fpn
-from model.head.yolox_head import Xhead
+from model.head.gfocalv1_head import GFocalHead
 
 
-class LightYOLOX(nn.Module):
+class LightGFOCAL(nn.Module):
     def __init__(self,
-                 num_classes=80,
                  backbone=None,
                  neck=None,
                  head=None,
                  ):
-        super(LightYOLOX, self).__init__()
+        super(LightGFOCAL, self).__init__()
         act_func = nn.LeakyReLU(negative_slope=0.1, inplace=True)
         if backbone is None:
             backbone = {"name": "shufflenet_v2_x0_5", "pretrained": True}
@@ -22,27 +21,10 @@ class LightYOLOX(nn.Module):
         self.backbone = build_backbone(**backbone)
         if neck is None:
             neck = {"name": "pan", "out_channels": 96}
-        neck.update({"in_channels_list": self.backbone.out_channels, "act_func": act_func})
+        neck.update({"act_func": act_func})
+        head.update({"act_func": act_func})
         self.fpn = build_fpn(**neck)
-
-        if head is None:
-            head = {
-                "inner_channel": 96,
-                "stacks": 1,
-                "conf_thresh": 0.1,
-                "nms_thresh": 0.6,
-                "center_radius": 2.5,
-                "reg_weights": 5.0,
-                "iou_type": "iou",
-                "class_agnostic": False
-            }
-        head.update({
-            "in_channels_list": self.fpn.out_channels,
-            "strides": [8., 16., 32.],
-            "num_classes": num_classes,
-            "act_func": act_func
-        })
-        self.head = Xhead(**head)
+        self.head = GFocalHead(**head)
 
     def feature_extra(self, x):
         x = self.backbone(x)
@@ -69,8 +51,8 @@ if __name__ == '__main__':
     from utils.flops import get_model_complexity_info
     import yaml
 
-    with open("configs/shuffle_pan_yolox_m.yaml", "r") as rf:
+    with open("configs/shuffle_pan_gfocal_s.yaml", "r") as rf:
         cfg = yaml.safe_load(rf)
-    net = LightYOLOX(**cfg["model"]).eval()
-    flops, params = get_model_complexity_info(net, input_shape=(3, cfg['data']['size'], cfg['data']['size']))
+    net = LightGFOCAL(**cfg["model"]).eval()
+    flops, params = get_model_complexity_info(net, input_shape=(3, 320, 320))
     print(flops, params)

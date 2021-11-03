@@ -121,7 +121,7 @@ def main(cfg_path):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--config",
-                        default="conifgs/shuffle_pan_yolox_s.yaml",
+                        default="configs/shuffle_pan_gfocal_s.yaml",
                         help="train config file path")
     parser.add_argument("--seed", type=int, default=1024, help="random seed")
     args = parser.parse_args()
