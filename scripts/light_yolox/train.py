@@ -17,17 +17,6 @@ def main(cfg_path):
     with open(cfg_path, "r") as rf:
         cfg = yaml.safe_load(rf)
     net = LightYOLOX(**cfg['model'])
-    # color_gitter = OneOf(
-    #     transforms=[
-    #         Identity(),
-    #         RandBCS(
-    #             brightness=0.2,
-    #             contrast=(0.6, 1.4),
-    #             saturation=(0.5, 1.2)
-    #         )
-    #     ]
-    # )
-
     nano_transform = Sequence(
         transforms=[
             RandBCS(
@@ -37,12 +26,12 @@ def main(cfg_path):
             ),
             NanoPerspective(
                 keep_ratio=True,
-                dst_shape=(cfg['data']['size'], cfg['data']['size']),
+                dst_shape=(cfg['data']['size'], cfg['data']['t_size']),
                 translate=0.2,
                 flip=0.5,
-                scale=(0.5, 1.4)
+                scale=(0.5, 1.2)
             ),
-            RandScaleToMax(max_threshes=[cfg['data']['size'], ], center_padding=False),
+            RandScaleToMax(max_threshes=[cfg['data']['t_size'], ], center_padding=False),
             PixelNormalize(),
             ChannelSwitch(channel_order=(2, 1, 0)),  # bgr -> rgb
             CoordTransform(c_type="xywh")
@@ -51,7 +40,7 @@ def main(cfg_path):
 
     basic_transform = Sequence(
         transforms=[
-            RandScaleToMax(max_threshes=[cfg['data']['size'], ], center_padding=False),
+            RandScaleToMax(max_threshes=[cfg['data']['v_size'], ], center_padding=False),
             PixelNormalize(),
             ChannelSwitch(channel_order=(2, 1, 0))  # bgr -> rgb
         ]
@@ -112,8 +101,6 @@ def main(cfg_path):
         gradient_clip_val=10,
         val_check_interval=1.0,
         callbacks=[ProgressBar(refresh_rate=0)],
-        # precision=16,
-        # amp_backend="native"
     )
     trainer.fit(task, train_dataloader, val_dataloader)
 

@@ -39,9 +39,6 @@ class TrainTask(LightningModule):
             )
 
     def on_train_epoch_start(self):
-        # if self.current_epoch == (self.cfg['optim']['epochs'] - self.cfg['optim']['no_aug_epoch']):
-        #     self.info("switch to nano transform")
-        #     self.train_dataloader().dataset.transform = self.train_dataloader().dataset.ext_transform
         self.tic = time.time()
         self.info("=" * 80)
         self.info("Training Start {:0>3d}|{:0>3d}".format(self.current_epoch, self.cfg['optim']['epochs']))
@@ -52,28 +49,27 @@ class TrainTask(LightningModule):
         label = label.to(self.device)
         target = {"label": label, "batch_len": meta_info['batch_len']}
         loss, iou, obj, cls, gt_num = self.model(inp, target)
-        # lr = self.optimizers().param_groups[0]["lr"]
+
         self.log("loss", loss, on_step=True, on_epoch=False, sync_dist=True)
         self.log("iou", iou, on_step=True, on_epoch=False, sync_dist=True)
         self.log("obj", obj, on_step=True, on_epoch=False, sync_dist=True)
         self.log("cls", cls, on_step=True, on_epoch=False, sync_dist=True)
-        # msg = "Train Epoch: {:0>3d}|{:0>3d} iter: {:0>4d}|{:0>4d} "
-        # msg += "loss: {:6.4f} iou: {:6.4f} obj: {:6.4f} cls: {:6.4f} lr: {:8.6f} match_num {:0>4d}"
-        # msg += " ori map: {:6.4f} ema map: {:6.4f}"
-        # msg = msg.format(
-        #     self.current_epoch,
-        #     self.cfg['optim']['epochs'],
-        #     int(batch_idx),
-        #     int(self.trainer.num_training_batches),
-        #     loss.item() / self.trainer.num_gpus,
-        #     iou.item() / self.trainer.num_gpus,
-        #     obj.item() / self.trainer.num_gpus,
-        #     cls.item() / self.trainer.num_gpus,
-        #     lr,
-        #     int(gt_num / self.trainer.num_gpus),
-        #     self.map_flag,
-        #     self.emap_flag)
-        # self.info(msg)
+        if batch_idx % self.cfg['optim']['log_intervel'] == 0:
+            lr = self.optimizers().param_groups[0]["lr"]
+            msg = "Train [{:0>3d}|{:0>3d}]({:0>4d}|{:0>4d}) "
+            msg += "loss: {:6.4f} iou: {:6.4f} obj: {:6.4f} cls: {:6.4f} lr: {:8.6f} match_num {:0>4d}"
+            msg = msg.format(
+                self.current_epoch,
+                self.cfg['optim']['epochs'],
+                int(batch_idx),
+                int(self.trainer.num_training_batches),
+                loss.item() / self.trainer.num_gpus,
+                iou.item() / self.trainer.num_gpus,
+                obj.item() / self.trainer.num_gpus,
+                cls.item() / self.trainer.num_gpus,
+                lr,
+                int(gt_num / self.trainer.num_gpus))
+            self.info(msg)
         return loss
 
     def optimizer_step(
@@ -130,6 +126,8 @@ class TrainTask(LightningModule):
     def validation_step(self, batch, batch_idx):
         if self.current_epoch == 0:
             return
+        if (self.current_epoch + 1) % self.cfg['optim']['val_intervel'] != 0:
+            return
         inp, label, meta_info = batch
         inp = inp.to(self.device)
         gts = label.to(self.device).split(meta_info["batch_len"])
@@ -138,7 +136,11 @@ class TrainTask(LightningModule):
         return gts, predicts, ema_predicts
 
     def validation_epoch_end(self, outputs: EPOCH_OUTPUT) -> None:
-        if len(outputs) == self.trainer.num_sanity_val_steps or self.current_epoch == 0:
+        if len(outputs) == self.trainer.num_sanity_val_steps:
+            return
+        if self.current_epoch == 0:
+            return
+        if (self.current_epoch + 1) % self.cfg['optim']['val_intervel'] != 0:
             return
         predict_list = list()
         gt_list = list()
@@ -182,10 +184,12 @@ class TrainTask(LightningModule):
                                                                                              emr_mean,
                                                                                              emap50_mean,
                                                                                              emap_mean))
+        self.info("best ORI mAP: {:6.4f} | best EMA mAP: {:6.4f}".format(self.map_flag, self.emap_flag))
         self.info("=" * 60)
 
-    def info(self, msg, print_flag=False):
+    def info(self, msg):
         if self.trainer.is_global_zero:
-            if print_flag:
+            if self.cfg['optim']['log_print']:
                 print(msg)
-            logging.info(msg)
+            else:
+                logging.info(msg)

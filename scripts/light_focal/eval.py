@@ -27,7 +27,7 @@ def main(cfg_path):
     else:
         device = torch.device("cpu")
     net = LightGFOCAL(**cfg['model'])
-    weight = torch.load(os.path.join(cfg['save_dir'], "ema_last.pth"), map_location="cpu")
+    weight = torch.load(os.path.join(cfg['save_dir'], "e_best.pth"), map_location="cpu")
     net.load_state_dict(weight)
     basic_transform = Sequence(
         transforms=[

@@ -9,7 +9,7 @@ model:
     out_channels: 96
   head:
     inner_channel: 96
-    stacks: 1
+    stacks: 2
     conf_thresh: 0.1
     nms_thresh: 0.6
     center_radius: 2.5
@@ -17,7 +17,8 @@ model:
     iou_type: iou
     class_agnostic: False
 data:
-  size: 320
+  t_size: 416
+  v_size: 416
   train_img_dir: /data/liangheming/coco/train2017
   train_json_path: /data/liangheming/coco/annotations/instances_train2017.json
   val_img_dir: /data/liangheming/coco/val2017
@@ -29,6 +30,9 @@ device:
   gpus: [0,1]
 
 optim:
+  log_print: False
+  log_intervel: 50
+  val_intervel: 2
   epochs: 300
   lr: 0.014
   momentum: 0.9

@@ -30,7 +30,7 @@ def main(cfg_path):
                 dst_shape=(cfg['data']['t_size'], cfg['data']['t_size']),
                 translate=0.2,
                 flip=0.5,
-                scale=(0.5, 1.4)
+                scale=(0.5, 1.2)
             ),
             RandScaleToMax(max_threshes=[cfg['data']['t_size'], ], center_padding=False),
             PixelNormalize(),

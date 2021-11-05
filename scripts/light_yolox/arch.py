@@ -69,8 +69,8 @@ if __name__ == '__main__':
     from utils.flops import get_model_complexity_info
     import yaml
 
-    with open("configs/shuffle_pan_yolox_m.yaml", "r") as rf:
+    with open("configs/shuffle_pan_yolox_s.yaml", "r") as rf:
         cfg = yaml.safe_load(rf)
     net = LightYOLOX(**cfg["model"]).eval()
-    flops, params = get_model_complexity_info(net, input_shape=(3, cfg['data']['size'], cfg['data']['size']))
+    flops, params = get_model_complexity_info(net, input_shape=(3, cfg['data']['v_size'], cfg['data']['v_size']))
     print(flops, params)

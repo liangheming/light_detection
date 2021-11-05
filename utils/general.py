@@ -167,6 +167,11 @@ class ModelEMA:
         # Update EMA attributes
         copy_attr(self.ema, model, include, exclude)
 
+    def reset_updates(self, num=None):
+        if num is None:
+            num = 1
+        self.updates = num
+
 
 class EpochWarmUpCosineDecayLRAdjust(object):
     def __init__(self, init_lr=0.01,

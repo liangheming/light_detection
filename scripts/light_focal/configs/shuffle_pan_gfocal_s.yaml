@@ -42,7 +42,8 @@ device:
 optim:
   log_print: False
   log_intervel: 50
-  val_intervel: 5
+  val_intervel: 2
+  update_ema: False
   epochs: 180
   lr: 0.07
   momentum: 0.9

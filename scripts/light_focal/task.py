@@ -48,6 +48,8 @@ class TrainTask(LightningModule):
             )
 
     def on_train_epoch_start(self):
+        if self.current_epoch in self.cfg['optim']['milestones'] and self.cfg['optim']['update_ema']:
+            self.ema.reset_updates()
         self.tic = time.time()
         self.info("=" * 80)
         self.info("Training Start {:0>3d}|{:0>3d}".format(self.current_epoch, self.cfg['optim']['epochs']))
