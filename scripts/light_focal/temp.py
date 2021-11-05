@@ -1,4 +1,5 @@
 import yaml
+import torch
 from scripts.light_focal.arch import LightGFOCAL
 from datasets.transform.augmentations import *
 from datasets.coco import COCODataSet
@@ -8,7 +9,7 @@ from torch.utils.data.dataloader import DataLoader
 def main():
     basic_transform = Sequence(
         transforms=[
-            RandScaleToMax(max_threshes=[416, ], center_padding=False),
+            RandScaleToMax(max_threshes=[320, ], center_padding=False),
             PixelNormalize(),
             ChannelSwitch(channel_order=(2, 1, 0))  # bgr -> rgb
         ]
@@ -30,11 +31,13 @@ def main():
     with open("configs/shuffle_pan_gfocal_s.yaml", "r") as rf:
         cfg = yaml.safe_load(rf)
     net = LightGFOCAL(**cfg["model"])
+    weight = torch.load("workspace/shuffle_pan_gfocal_s/last.pth", map_location="cpu")
+    net.load_state_dict(weight)
+    net.eval()
     for img, label, meta_info in val_dataloader:
         target = {"label": label, "batch_len": meta_info['batch_len']}
         out = net(img, target)
-        for o in out:
-            print(o)
+        print(out)
         break
 
 

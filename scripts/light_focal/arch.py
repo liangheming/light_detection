@@ -54,5 +54,5 @@ if __name__ == '__main__':
     with open("configs/shuffle_pan_gfocal_s.yaml", "r") as rf:
         cfg = yaml.safe_load(rf)
     net = LightGFOCAL(**cfg["model"]).eval()
-    flops, params = get_model_complexity_info(net, input_shape=(3, 320, 320))
+    flops, params = get_model_complexity_info(net, input_shape=(3, cfg['data']['v_size'], cfg['data']['v_size']))
     print(flops, params)

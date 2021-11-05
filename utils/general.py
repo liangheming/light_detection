@@ -320,6 +320,49 @@ class EpochWarmUpCosineDecayOneCycle(object):
         return lr
 
 
+class IterWarmUpMultiLRDecay(object):
+    def __init__(self,
+                 init_lr=0.01,
+                 warmup_iter=1000,
+                 epochs=300,
+                 iter_per_epoch=300,
+                 warmup_factors=0.01,
+                 milestones=[130, 160, 175],
+                 gama=0.1
+                 ):
+        super(IterWarmUpMultiLRDecay, self).__init__()
+        self.init_lr = init_lr
+        self.warmup_iter = warmup_iter
+        self.warmup_factors = warmup_factors
+        self.epochs = epochs
+        self.milestones = milestones
+        self.iter_per_epoch = iter_per_epoch
+        self.gama = gama
+        self.warm_up_epoch_up_bound = math.ceil(warmup_iter / iter_per_epoch)
+        assert milestones[0] >= self.warm_up_epoch_up_bound
+
+    def get_warm_up_lr(self, it, epoch):
+        cur_it = it + epoch * self.iter_per_epoch
+        lr = np.interp(cur_it, [0, self.warmup_iter], [self.init_lr * self.warmup_factors, self.init_lr])
+        return lr
+
+    def get_lr(self, it, epoch):
+        cur_iter = it + epoch * self.iter_per_epoch
+        if epoch < self.warm_up_epoch_up_bound:
+            lr = self.init_lr
+            if cur_iter < self.warmup_iter:
+                lr = self.get_warm_up_lr(it, epoch)
+        else:
+            milestones = np.array(self.milestones)
+            lr = self.init_lr * self.gama ** ((epoch >= milestones).sum())
+        return lr
+
+    def __call__(self, optimizer, it, epoch):
+        lr = self.get_lr(it, epoch)
+        for x in optimizer.param_groups:
+            x['lr'] = lr
+
+
 class AverageLogger(object):
     def __init__(self):
         self.data = 0.
