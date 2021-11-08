@@ -43,13 +43,13 @@ class TrainTask(LightningModule):
         if self.trainer.is_global_zero:
             logging.basicConfig(
                 level=logging.INFO,
-                filename=os.path.join(self.cfg['save_dir'], "logs.txt"),
+                filename=os.path.join(self.cfg['save_dir'], "log.txt"),
                 filemode="w",
             )
 
     def on_train_epoch_start(self):
         if self.current_epoch in self.cfg['optim']['milestones'] and self.cfg['optim']['update_ema']:
-            self.ema.reset_updates()
+            self.ema.reset_updates(self.current_epoch * 5)
         self.tic = time.time()
         self.info("=" * 80)
         self.info("Training Start {:0>3d}|{:0>3d}".format(self.current_epoch, self.cfg['optim']['epochs']))

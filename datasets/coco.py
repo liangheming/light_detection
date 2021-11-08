@@ -130,9 +130,12 @@ class COCODataSet(BaseDetectionDataset):
                 continue
             label_info = np.array(label_list)
             if len(label_info):
-                box_info = BoxInfoCV(img_path=img_path, boxes=label_info[:, 1:], labels=label_info[:, 0])
+                box_info = BoxInfoCV(img_path=img_path,
+                                     boxes=label_info[:, 1:],
+                                     labels=label_info[:, 0],
+                                     padding="mean_std")
             else:
-                box_info = BoxInfoCV(img_path=img_path, boxes=None, labels=None)
+                box_info = BoxInfoCV(img_path=img_path, boxes=None, labels=None, padding="mean_std")
                 box_info.revise_label()
             box_info.id = img_id
             box_info.ext_prop.update({"id": img_id})
@@ -176,14 +179,23 @@ class COCODataSet(BaseDetectionDataset):
 if __name__ == '__main__':
     from torch.utils.data.dataloader import DataLoader
 
-    color_gitter = OneOf(
+    nano_transform = Sequence(
         transforms=[
-            Identity(),
             RandBCS(
                 brightness=0.2,
                 contrast=(0.6, 1.4),
                 saturation=(0.5, 1.2)
-            )
+            ),
+            NanoPerspective(
+                keep_ratio=True,
+                dst_shape=(320, 320),
+                translate=0.2,
+                flip=0.5,
+                scale=(0.5, 1.2)
+            ),
+            RandScaleToMax(max_threshes=[320, ], center_padding=False),
+            PixelNormalize(),
+            ChannelSwitch(channel_order=(2, 1, 0)),  # bgr -> rgb
         ]
     )
     data_set = COCODataSet(img_dir="/home/lion/data/coco/val2017",
@@ -191,15 +203,11 @@ if __name__ == '__main__':
                            transform=nano_transform,
                            visualize=True
                            )
-    mosaic = MosaicWrapper(
-        candidate_box_info=data_set.data_list,
-        sizes=[416, ],
-        color_gitter=color_gitter
-    )
-    data_set.transform = mosaic
-    dataloader = DataLoader(dataset=data_set, batch_size=16, shuffle=True, num_workers=1,
+    dataloader = DataLoader(dataset=data_set, batch_size=16, shuffle=False, num_workers=1,
                             collate_fn=data_set.collect_fn, drop_last=True)
     for inp, label, meta_info in dataloader:
         print(inp.shape)
         print(label.shape)
         print(meta_info)
+    # for info in data_set:
+    #     print(info.img.shape)

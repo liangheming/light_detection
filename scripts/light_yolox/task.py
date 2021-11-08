@@ -34,7 +34,7 @@ class TrainTask(LightningModule):
         if self.trainer.is_global_zero:
             logging.basicConfig(
                 level=logging.INFO,
-                filename=os.path.join(self.cfg['save_dir'], "logs.txt"),
+                filename=os.path.join(self.cfg['save_dir'], "log.txt"),
                 filemode="w",
             )
 

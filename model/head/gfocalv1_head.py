@@ -4,7 +4,7 @@ import torchvision
 from torch import nn
 from model.module.convs import DWCBR2
 # from utils.general import reduce_mean
-from utils.box_utils import bboxes_iou, IOULoss
+from utils.box_utils import IOULoss, bbox_overlaps
 import torch.nn.functional as f
 
 
@@ -158,7 +158,7 @@ class GFocalHead(nn.Module):
     @staticmethod
     def get_assign_lazy(grid_cells, gt_boxes, cell_num_each_level, top_k=7, inf=1000000):
         num_gt, num_grid_cells = gt_boxes.size(0), sum(cell_num_each_level)
-        overlaps = bboxes_iou(grid_cells, gt_boxes)
+        overlaps = bbox_overlaps(grid_cells, gt_boxes)
         assigned_gt_inds = overlaps.new_full((num_grid_cells,), -1, dtype=torch.long)
 
         gt_center = (gt_boxes[:, :2] + gt_boxes[:, 2:]) / 2.0
@@ -290,12 +290,12 @@ class GFocalHead(nn.Module):
             x1y1 = pos_cell_center - pos_bbox_pred_corners[:, :2]
             x2y2 = pos_cell_center + pos_bbox_pred_corners[:, 2:]
             pos_decode_bbox_pred = torch.cat([x1y1, x2y2], dim=-1)
-            cls_target[gt_mask, label[:, 0][assigned_gt_inds[gt_mask]].long()] = self.iou_loss.box_similarity(
+            cls_target[gt_mask, label[:, 0][assigned_gt_inds[gt_mask]].long()] = bbox_overlaps(
                 pos_decode_bbox_pred.detach(),
-                pos_bbox_targets)
+                pos_bbox_targets, is_aligned=True)
             corner_lt = (pos_cell_center - pos_bbox_targets[:, :2]) / expand_strides[gt_mask][:, None]
-            corner_rt = (pos_bbox_targets[:, 2:] - pos_cell_center) / expand_strides[gt_mask][:, None]
-            corners_targets = torch.cat([corner_lt, corner_rt],
+            corner_rb = (pos_bbox_targets[:, 2:] - pos_cell_center) / expand_strides[gt_mask][:, None]
+            corners_targets = torch.cat([corner_lt, corner_rb],
                                         dim=-1).clamp(min=0, max=self.reg_max - 0.1)
             cls_target_list.append(cls_target)
             box_predict_list.append(pos_decode_bbox_pred)

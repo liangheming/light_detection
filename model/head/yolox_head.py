@@ -38,6 +38,7 @@ class Xhead(nn.Module):
         self.cls_preds = nn.ModuleList()
         self.reg_preds = nn.ModuleList()
         self.obj_preds = nn.ModuleList()
+        self.max_out = 100
         for i in range(len(in_channels_list)):
             self.stems.append(
                 CBR(in_channels_list[i], inner_channel, 1, 1, act_func=act_func) if in_channels_list[i] != inner_channel
@@ -160,7 +161,7 @@ class Xhead(nn.Module):
         loss = loss_iou + loss_obj + loss_cls
         return loss, loss_iou.detach(), loss_obj.detach(), loss_cls.detach(), gt_num
 
-    def predict(self, xs):
+    def predict_bak(self, xs):
         box_list = list()
         outputs = self.forward_impl(xs)
         _, _, h, w = outputs[0].shape
@@ -171,6 +172,63 @@ class Xhead(nn.Module):
         box_list = torch.cat(box_list, dim=1)
         bbox = self.postprocess(box_list, size)
         return bbox
+
+    def predict(self, xs):
+        nms_pre = 1000
+        outputs = list()
+        for k in range(len(xs)):
+            x = xs[k]
+            x = self.stems[k](x)
+            cls_output = self.cls_preds[k](self.cls_convs[k](x))
+            reg_feat = self.reg_convs[k](x)
+            reg_output = self.reg_preds[k](reg_feat)
+            obj_output = self.obj_preds[k](reg_feat)
+            if self.grids[k].shape[2:4] != x.shape[2:4] or self.grids[k].device != x.device:
+                self.grids[k] = self.get_grid(x.shape[2], x.shape[3]).type_as(x)
+                self.grids[k].requires_grad_(False)
+            box_predicts = torch.cat([(reg_output[:, :2, ...] + self.grids[k]) * self.strides[k],
+                                      reg_output[:, 2:4, ...].exp() * self.strides[k]], dim=1)
+            scores = obj_output.sigmoid() * cls_output.sigmoid()
+            outputs.append((box_predicts, scores))
+        _, _, h, w = outputs[0][0].shape
+        inp_w, inp_h = (w * self.strides[0], h * self.strides[0])
+        boxes = list()
+        scores = list()
+        dets = list()
+        bs = xs[0].shape[0]
+        for box, score in outputs:
+            box = box.permute(0, 2, 3, 1).contiguous().view(bs, -1, 4)
+            score = score.permute(0, 2, 3, 1).contiguous().view(bs, -1, self.num_classes)
+            box[..., :2] = box[..., :2] - box[..., 2:] * 0.5
+            box[..., 2:] = box[..., :2] + box[..., 2:]
+            box[..., [0, 2]] = box[..., [0, 2]].clamp(min=0, max=inp_w)
+            box[..., [1, 3]] = box[..., [1, 3]].clamp(min=0, max=inp_h)
+            if score.shape[1] > nms_pre:
+                max_score, _ = score.max(dim=-1)
+                _, topk_inds = max_score.topk(nms_pre, dim=-1)
+                score = score[torch.arange(bs)[:, None], topk_inds, :]
+                box = box[torch.arange(bs)[:, None], topk_inds, :]
+            scores.append(score)
+            boxes.append(box)
+        scores = torch.cat(scores, dim=1)
+        boxes = torch.cat(boxes, dim=1)
+        for b in range(bs):
+            instance_score = scores[b]
+            instance_boxes = boxes[b]
+            valid_mask = instance_score > self.conf_thresh
+            if valid_mask.sum() < 1:
+                dets.append(None)
+                continue
+            candidate_idx, class_idx = valid_mask.nonzero(as_tuple=True)
+            valid_scores = instance_score[candidate_idx, class_idx]
+            valid_boxes = instance_boxes[candidate_idx]
+            idx = torchvision.ops.batched_nms(valid_boxes, valid_scores, class_idx.long(), self.nms_thresh)
+            if len(idx) > self.max_out:
+                idx = idx[:self.max_out]
+            det = torch.cat([valid_boxes[idx], valid_scores[idx, None], class_idx[idx, None].type(valid_boxes.dtype)],
+                            dim=-1)
+            dets.append(det)
+        return dets
 
     def postprocess(self, prediction, size):
         """

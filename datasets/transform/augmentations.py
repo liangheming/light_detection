@@ -821,19 +821,21 @@ class NanoPerspective(BasicTransform):
             )
         ResizeM = self.get_resize_matrix((width, height), dst_shape, self.keep_ratio)
         M = ResizeM @ M
-        img = cv.warpPerspective(raw_img, M, dsize=tuple(dst_shape))
+        img = cv.warpPerspective(raw_img, M, dsize=tuple(dst_shape), borderValue=box_info.padding_val)
         box_info.img = img
         if box_info.boxes is not None and len(box_info.boxes):
             assert box_info.xyxy and not box_info.normalized_box, "box form should be xyxy and not normalized coord"
             xy = self.warp_boxes(box_info.boxes, M, dst_shape[0], dst_shape[1])
-            w = xy[:, 2] - xy[:, 0]
-            h = xy[:, 3] - xy[:, 1]
-            area = w * h
-            area0 = (box_info.boxes[:, 2] - box_info.boxes[:, 0]) * (box_info.boxes[:, 3] - box_info.boxes[:, 1])
-            ar = np.maximum(w / (h + 1e-16), h / (w + 1e-16))
-            i = (w > 2) & (h > 2) & (area / (area0 * scale + 1e-16) > 0.2) & (ar < 20)
-            box_info.boxes = xy[i]
-            box_info.labels = box_info.labels[i]
+            box_info.boxes = xy
+            # w = xy[:, 2] - xy[:, 0]
+            # h = xy[:, 3] - xy[:, 1]
+            # area = w * h
+            # area0 = (box_info.boxes[:, 2] - box_info.boxes[:, 0]) * (box_info.boxes[:, 3] - box_info.boxes[:, 1])
+            # ar = np.maximum(w / (h + 1e-16), h / (w + 1e-16))
+            # i = (w > 2) & (h > 2) & (area / (area0 * scale + 1e-16) > 0.2) & (ar < 20)
+            # box_info.boxes = xy[i]
+            # box_info.labels = box_info.labels[i]
+
         return box_info
 
 

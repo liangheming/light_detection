@@ -26,7 +26,7 @@ def main(cfg_path):
             ),
             NanoPerspective(
                 keep_ratio=True,
-                dst_shape=(cfg['data']['size'], cfg['data']['t_size']),
+                dst_shape=(cfg['data']['t_size'], cfg['data']['t_size']),
                 translate=0.2,
                 flip=0.5,
                 scale=(0.5, 1.2)
@@ -108,7 +108,7 @@ def main(cfg_path):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--config",
-                        default="configs/shuffle_pan_gfocal_s.yaml",
+                        default="configs/shuffle_pan_yolox_s.yaml",
                         help="train config file path")
     parser.add_argument("--seed", type=int, default=1024, help="random seed")
     args = parser.parse_args()
