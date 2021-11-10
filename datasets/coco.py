@@ -133,9 +133,9 @@ class COCODataSet(BaseDetectionDataset):
                 box_info = BoxInfoCV(img_path=img_path,
                                      boxes=label_info[:, 1:],
                                      labels=label_info[:, 0],
-                                     padding="mean_std")
+                                     )
             else:
-                box_info = BoxInfoCV(img_path=img_path, boxes=None, labels=None, padding="mean_std")
+                box_info = BoxInfoCV(img_path=img_path, boxes=None, labels=None)
                 box_info.revise_label()
             box_info.id = img_id
             box_info.ext_prop.update({"id": img_id})
@@ -194,8 +194,8 @@ if __name__ == '__main__':
                 scale=(0.5, 1.2)
             ),
             RandScaleToMax(max_threshes=[320, ], center_padding=False),
-            PixelNormalize(),
-            ChannelSwitch(channel_order=(2, 1, 0)),  # bgr -> rgb
+            # PixelNormalize(),
+            # ChannelSwitch(channel_order=(2, 1, 0)),  # bgr -> rgb
         ]
     )
     data_set = COCODataSet(img_dir="/home/lion/data/coco/val2017",

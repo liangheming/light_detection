@@ -3,7 +3,7 @@ import torch
 import torchvision
 from torch import nn
 from model.module.convs import DWCBR2
-# from utils.general import reduce_mean
+from utils.general import reduce_mean
 from utils.box_utils import IOULoss, bbox_overlaps
 import torch.nn.functional as f
 
@@ -310,9 +310,9 @@ class GFocalHead(nn.Module):
         qfl_target_tensor = torch.stack(cls_target_list, dim=0)
         box_predict_tensor = torch.cat(box_predict_list, dim=0)
         box_targets_tensor = torch.cat(box_targets_list, dim=0)
-        # gt_num = reduce_mean(gt_num)
+        gt_num = reduce_mean(gt_num)
         avg_factor = weights_targets_tensor.sum()
-        # avg_factor = reduce_mean(avg_factor)
+        avg_factor = reduce_mean(avg_factor)
         qfl_loss = self.qlf_loss(qfl_predict_tensor, qfl_target_tensor).sum() / gt_num
         dfl_loss = self.dlf_loss(dfl_predict_tensor, dfl_targets_tensor, weights_targets_tensor).sum() / avg_factor
         iou_loss = self.iou_loss(box_predict_tensor, box_targets_tensor, weights_targets_tensor).sum() / avg_factor

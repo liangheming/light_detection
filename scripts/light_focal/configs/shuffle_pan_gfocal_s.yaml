@@ -29,26 +29,25 @@ data:
   v_size: 320
   train_img_dir: /data/liangheming/coco/train2017
   train_json_path: /data/liangheming/coco/annotations/instances_train2017.json
-#  train_img_dir: /data/liangheming/coco/val2017
-#  train_json_path: /data/liangheming/coco/annotations/instances_val2017.json
+  #  train_img_dir: /data/liangheming/coco/val2017
+  #  train_json_path: /data/liangheming/coco/annotations/instances_val2017.json
   val_img_dir: /data/liangheming/coco/val2017
   val_json_path: /data/liangheming/coco/annotations/instances_val2017.json
 
 device:
-  batchsize_per_gpu: 96
+  batchsize_per_gpu: 64
   workers_per_gpu: 8
-  gpus: [0,]
+  gpus: [0, 1]
 
 optim:
+  epochs: 180
+  lr: 0.014
+  momentum: 0.9
+  weight_decay: 0.0001
+  warmup_epoch: 1
+  warmup_factors: 0.00001
+
+log:
   log_print: False
   log_intervel: 50
   val_intervel: 2
-  update_ema: False
-  epochs: 180
-  lr: 0.07
-  momentum: 0.9
-  weight_decay: 0.0001
-  warmup_iter: 1000
-  warmup_factors: 0.00001
-  milestones: [130, 160, 175]
-  gama: 0.1

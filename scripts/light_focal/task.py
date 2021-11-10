@@ -6,7 +6,7 @@ from typing import Any, Dict
 from pytorch_lightning.utilities.types import STEP_OUTPUT, EPOCH_OUTPUT
 from torch import nn
 from pytorch_lightning import LightningModule
-from utils.general import IterWarmUpMultiLRDecay, ModelEMA
+from utils.general import EpochWarmUpCosineDecayOneCycle, ModelEMA
 from utils.coco_metrics import coco_map_tensor
 
 
@@ -22,24 +22,24 @@ class TrainTask(LightningModule):
 
     def on_train_start(self):
         self.ema = ModelEMA(self.model)
-        # self.lr_adjuster = EpochWarmUpCosineDecayOneCycle(
-        #     init_lr=self.cfg['optim']['lr'],
-        #     warmup_epoch=self.cfg['optim']['warmup_epoch'],
-        #     epochs=self.cfg['optim']['epochs'],
-        #     total_epochs=self.cfg['optim']['epochs'],
-        #     iter_per_epoch=self.trainer.num_training_batches,
-        #     momentum=self.cfg['optim']['momentum'],
-        #     bias_idx=2
-        # )
-        self.lr_adjuster = IterWarmUpMultiLRDecay(
+        self.lr_adjuster = EpochWarmUpCosineDecayOneCycle(
             init_lr=self.cfg['optim']['lr'],
-            iter_per_epoch=self.trainer.num_training_batches,
-            warmup_iter=self.cfg['optim']['warmup_iter'],
+            warmup_epoch=self.cfg['optim']['warmup_epoch'],
             epochs=self.cfg['optim']['epochs'],
-            warmup_factors=self.cfg['optim']['warmup_factors'],
-            milestones=self.cfg['optim']['milestones'],
-            gama=self.cfg['optim']['gama']
+            total_epochs=self.cfg['optim']['epochs'],
+            iter_per_epoch=self.trainer.num_training_batches,
+            momentum=self.cfg['optim']['momentum'],
+            bias_idx=2
         )
+        # self.lr_adjuster = IterWarmUpMultiLRDecay(
+        #     init_lr=self.cfg['optim']['lr'],
+        #     iter_per_epoch=self.trainer.num_training_batches,
+        #     warmup_iter=self.cfg['optim']['warmup_iter'],
+        #     epochs=self.cfg['optim']['epochs'],
+        #     warmup_factors=self.cfg['optim']['warmup_factors'],
+        #     milestones=self.cfg['optim']['milestones'],
+        #     gama=self.cfg['optim']['gama']
+        # )
         if self.trainer.is_global_zero:
             logging.basicConfig(
                 level=logging.INFO,
@@ -48,10 +48,10 @@ class TrainTask(LightningModule):
             )
 
     def on_train_epoch_start(self):
-        if self.current_epoch in self.cfg['optim']['milestones'] and self.cfg['optim']['update_ema']:
-            self.ema.reset_updates(self.current_epoch * 5)
+        # if self.current_epoch in self.cfg['optim']['milestones'] and self.cfg['optim']['update_ema']:
+        #     self.ema.reset_updates(self.current_epoch * 5)
         self.tic = time.time()
-        self.info("=" * 80)
+        self.info("=" * 120)
         self.info("Training Start {:0>3d}|{:0>3d}".format(self.current_epoch, self.cfg['optim']['epochs']))
 
     def training_step(self, batch, batch_idx):
@@ -67,7 +67,7 @@ class TrainTask(LightningModule):
         self.log("dlf", dlf, on_step=True, on_epoch=False, sync_dist=True)
 
         lr = self.optimizers().param_groups[0]["lr"]
-        if batch_idx % self.cfg['optim']['log_intervel'] == 0:
+        if batch_idx % self.cfg['log']['log_intervel'] == 0:
             msg = "Train [{:0>3d}|{:0>3d}]({:0>4d}|{:0>4d}) "
             msg += "loss: {:6.4f} iou: {:6.4f} qfl: {:6.4f} dfl: {:6.4f} lr: {:8.6f} match_num {:0>4d}"
             msg = msg.format(
@@ -110,7 +110,7 @@ class TrainTask(LightningModule):
         duration = time.time() - self.tic
         self.info("Training End {:0>3d}|{:0>3d} duration: {:0>2d}:{:0>2d}"
                   .format(self.current_epoch, self.cfg['optim']['epochs'], int(duration / 60), int(duration % 60)))
-        self.info("=" * 80)
+        self.info("=" * 120)
 
     def configure_optimizers(self):
         g0, g1, g2 = [], [], []
@@ -138,7 +138,7 @@ class TrainTask(LightningModule):
     def validation_step(self, batch, batch_idx):
         if self.current_epoch == 0:
             return
-        if (self.current_epoch + 1) % self.cfg['optim']['val_intervel'] != 0:
+        if (self.current_epoch + 1) % self.cfg['log']['val_intervel'] != 0:
             return
         inp, label, meta_info = batch
         inp = inp.to(self.device)
@@ -152,7 +152,7 @@ class TrainTask(LightningModule):
             return
         if self.current_epoch == 0:
             return
-        if (self.current_epoch + 1) % self.cfg['optim']['val_intervel'] != 0:
+        if (self.current_epoch + 1) % self.cfg['log']['val_intervel'] != 0:
             return
         predict_list = list()
         gt_list = list()
@@ -187,7 +187,7 @@ class TrainTask(LightningModule):
                 self.emap_flag = emap_mean
                 torch.save(self.ema.ema.state_dict(), os.path.join(self.cfg['save_dir'], "ema_best.pth"))
 
-        self.info("=" * 60)
+        self.info("=" * 80)
         self.info("ORI performance mp:{:6.4f} mr:{:6.4f} mAP50:{:6.4f} mAP:{:6.4f}\n".format(mp_mean,
                                                                                              mr_mean,
                                                                                              map50_mean,
@@ -197,11 +197,11 @@ class TrainTask(LightningModule):
                                                                                              emap50_mean,
                                                                                              emap_mean))
         self.info("best ORI mAP: {:6.4f} | best EMA mAP: {:6.4f}".format(self.map_flag, self.emap_flag))
-        self.info("=" * 60)
+        self.info("=" * 80)
 
     def info(self, msg):
         if self.trainer.is_global_zero:
-            if self.cfg['optim']['log_print']:
+            if self.cfg['log']['log_print']:
                 print(msg)
             else:
                 logging.info(msg)
